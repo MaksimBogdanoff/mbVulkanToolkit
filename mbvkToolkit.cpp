@@ -4,6 +4,13 @@
 using namespace std;
 
 
+#if defined (_WIN32)
+static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+#endif
+
+
+
+
 // all toolkit function
 namespace mbtk
 {
@@ -12,6 +19,96 @@ namespace mbtk
 		if (strcmp(s1, s2) == 0)
 			return true;
 		return false;
+	}
+
+
+	//-------------------------------------------------------------------------------------------------------------------------
+
+	// WINDOW WIN32 //
+
+	// mb_programmer: constructor.
+	WindowWin32::WindowWin32()
+	{
+		hWIND = nullptr;
+		hINSTANCE = GetModuleHandleA(nullptr);
+		Width = 500;
+		Height = 500;
+		nameWindow = "mbVulkan";
+	}
+
+	// mb_programmer: constructor.
+	WindowWin32::WindowWin32(const char* title, int w, int h)
+	{
+		hWIND = nullptr;
+		hINSTANCE = GetModuleHandleA(nullptr);
+		Width = 500;
+		Height = 500;
+		nameWindow = title;
+
+		Setup();
+
+	}
+
+	// mb_programmer: destructor.
+	WindowWin32::~WindowWin32()
+	{
+
+	}
+
+	// mb_programmer: massage window.
+	void WindowWin32::PoolEvents()
+	{
+		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+		{
+
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+
+		}
+	}
+
+	// mb_programmer: settings.
+	void WindowWin32::Setup()
+	{
+		LPCSTR windowClassName = "window class";
+		
+		WNDCLASSA windowClassInfo;
+		{
+			windowClassInfo.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+			windowClassInfo.lpfnWndProc = DefWindowProcA;
+			windowClassInfo.cbClsExtra = 0;
+			windowClassInfo.cbWndExtra = 0;
+			windowClassInfo.hInstance = hINSTANCE;
+			windowClassInfo.hIcon = nullptr;
+			windowClassInfo.hCursor = nullptr;
+			windowClassInfo.hbrBackground = nullptr;
+			windowClassInfo.lpszMenuName = nullptr;
+			windowClassInfo.lpszClassName = windowClassName;
+		}
+
+		if (!RegisterClassA(&windowClassInfo))
+		{
+			throw std::exception("failed to register window class");
+		}
+		
+
+		hWIND = CreateWindowA(
+			windowClassName,
+			nameWindow,
+			WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+			0, 0, Width, Height,
+			nullptr,
+			nullptr,
+			hINSTANCE,
+			nullptr
+			);
+
+		if (!hWIND)
+		{
+			throw std::exception("failed to create window");
+		}
+
+		
 	}
 
 }
@@ -340,6 +437,8 @@ namespace mbvk
 	//-----------------------------------------------------------------------------------------------------------------------------------------
 
 
+	// 3 VULKAN DEVICE //
+
 	// mb_programmer: constructor.
 	OBJ_Device::OBJ_Device()
 	{
@@ -496,4 +595,110 @@ namespace mbvk
 	}
 
 
+	//-----------------------------------------------------------------------------------------------------------------------------------------
+
+	
+	// 4 VULKAN SURFACE //
+
+	// mb_programmer: constructor.
+	OBJ_Surface::OBJ_Surface()
+	{
+		vk_Surface = VK_NULL_HANDLE;
+		vk_Instance = VK_NULL_HANDLE;
+	}
+
+	OBJ_Surface::OBJ_Surface(const OBJ_Instance &Istance)
+	{
+		vk_Surface = VK_NULL_HANDLE;
+		vk_Instance = Istance.vk_Instanse;
+
+	}
+	
+	// mb_programmer: constructor for windows system.
+	void OBJ_Surface::Create(void* win_Inst_or_xcb_connection, void* win32Wind_or_xcb_window)
+	{
+
+		VkResult error = VK_SUCCESS;
+
+		// Windows system.
+#if defined VK_USE_PLATFORM_WIN32_KHR
+		VkWin32SurfaceCreateInfoKHR vk_win32SurfaceCreateInfoKHR = {};
+		vk_win32SurfaceCreateInfoKHR.sType = VkStructureType::VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+		vk_win32SurfaceCreateInfoKHR.pNext = nullptr;
+		vk_win32SurfaceCreateInfoKHR.flags = 0;
+		vk_win32SurfaceCreateInfoKHR.hinstance = (HINSTANCE)win_Inst_or_xcb_connection; //GetModuleHandle(NULL);
+		vk_win32SurfaceCreateInfoKHR.hwnd = (HWND)win32Wind_or_xcb_window;
+		
+		if (vkCreateWin32SurfaceKHR(vk_Instance, &vk_win32SurfaceCreateInfoKHR, nullptr, &vk_Surface) != VkResult::VK_SUCCESS)
+		{
+			throw std::exception("Vulkan failed to create surface");
+		}
+	// Linux system. 
+#elif defined(VK_USE_PLATFORM_XCB_KHR)
+		VkXcbSurfaceCreateInfoKHR surfaceCreateInfo = {};
+		surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
+		surfaceCreateInfo.connection = (xcb_connection_t*)win_Inst_or_xcb_connection;
+		surfaceCreateInfo.window = (xcb_window_t)win32Wind_or_xcb_window;
+		if (vkCreateXcbSurfaceKHR(vk_Instance, &surfaceCreateInfo, nullptr, &vk_Surface) != VkResult::VK_SUCCESS)
+		{
+			throw std::exception("Vulkan could not create surface!");
+		}
+#endif
+
+		cout << "Vulkan create surface!" << endl;
+		
+	}
+
+	// mb_programmer: destructor.
+	OBJ_Surface::~OBJ_Surface()
+	{
+		vkDestroySurfaceKHR(vk_Instance, vk_Surface, nullptr);
+	}
+
+	// mb_programmer: ...
+	void OBJ_Surface::Setup()
+	{
+
+	}
+
+
+
+
+
 }// end namespace mbvk...
+
+
+
+#if defined (_WIN32)
+
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+	switch (uMsg)
+	{
+	case WM_SIZE: // Handle window resizing
+	{
+		int width = LOWORD(lParam);  // Macro to get the low-order word.
+		int height = HIWORD(lParam); // Macro to get the high-order word.
+
+									 //std::cout << width << std::endl;
+									 // Respond to the message:
+									 //OnSize(hwnd, (UINT)wParam, width, height);
+	}
+	break;
+	case WM_CLOSE:
+	{
+		if (MessageBox(NULL, L"Really quit?", L"My application", MB_OKCANCEL) > 0)
+		{
+			DestroyWindow(hwnd);
+		}
+	}
+	break;
+
+
+	}
+
+	return DefWindowProc(hwnd, uMsg, wParam, lParam);;
+
+}
+
+#endif

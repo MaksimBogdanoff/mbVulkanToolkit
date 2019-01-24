@@ -56,6 +56,27 @@ namespace mbtk
 	}
 
 	
+
+	class WindowWin32
+	{
+	public:
+		WindowWin32();
+		WindowWin32(const char* title, int w,int h);
+		virtual ~WindowWin32();
+
+		void PoolEvents();
+		
+		HWND hWIND;
+		HINSTANCE hINSTANCE;
+		int Width, Height;
+	private:
+		const char* nameWindow;
+		MSG msg;
+		void Setup();
+	};
+
+
+
 }
 
 
@@ -169,8 +190,21 @@ namespace mbvk
 	};
 
 
-
-
+	// 4 VULKAN SURFACE //
+	class OBJ_Surface
+	{
+	public:
+		OBJ_Surface();
+		OBJ_Surface(const OBJ_Instance &Istance);
+		virtual ~OBJ_Surface();
+		
+		void Create(void* win_Inst_or_xcb_connection, void* win32Wind_or_xcb_window);
+		
+		VkSurfaceKHR vk_Surface;
+	private:
+		VkInstance vk_Instance;
+		void Setup();
+	};
 
 
 }
