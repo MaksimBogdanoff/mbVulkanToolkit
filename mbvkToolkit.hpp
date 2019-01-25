@@ -55,7 +55,9 @@ namespace mbtk
 		return (std::find(data.begin(), data.end(), extension) != data.end());
 	}
 
-	
+
+
+#if defined VK_USE_PLATFORM_WIN32_KHR
 
 	class WindowWin32
 	{
@@ -65,10 +67,12 @@ namespace mbtk
 		virtual ~WindowWin32();
 
 		void PoolEvents();
-		
+
+
 		HWND hWIND;
 		HINSTANCE hINSTANCE;
 		int Width, Height;
+
 	private:
 		const char* nameWindow;
 		MSG msg;
@@ -76,6 +80,32 @@ namespace mbtk
 	};
 
 
+#endif
+
+
+#if defined VK_USE_PLATFORM_XCB_KHR  // <== WARNING: in work!!!
+
+	class WindowXCB
+	{
+	public:
+		WindowXCB();
+		virtual ~WindowXCB();
+
+
+
+		int Width, Height;
+		bool quit = false;
+		xcb_connection_t *connection;
+		xcb_screen_t *screen;
+		xcb_window_t window;
+		xcb_intern_atom_reply_t *atom_wm_delete_window;
+
+
+	private:
+		void Setup();
+	};
+
+#endif
 
 }
 
@@ -107,6 +137,11 @@ namespace mbvk
 	// mb_programmer: Get the queue family index that supports the requested queue flags.
 	uint32_t PhysicaDevice_FindQueueFamilyIndex(VkQueueFlagBits queueFlags, const std::vector<VkQueueFamilyProperties>& dataQueueFamilyprop);
 
+	// mb_programmer: fined surface format, return function count format.
+	uint32_t SurfaceKHR_FindFormat(VkSurfaceKHR vk_Surface, const VkPhysicalDevice& physicalDevice, std::vector<VkSurfaceFormatKHR>& dataFormat);
+
+	// mb_programmer: find swapchain image.
+	uint32_t SwapchainKHR_FindImage(const VkDevice& Devise,const VkSwapchainKHR& Swapchain, std::vector<VkImage>& dataImage);
 
 
 
@@ -198,12 +233,37 @@ namespace mbvk
 		OBJ_Surface(const OBJ_Instance &Istance);
 		virtual ~OBJ_Surface();
 		
-		void Create(void* win_Inst_or_xcb_connection, void* win32Wind_or_xcb_window);
+		void Create(mbtk::WindowWin32 &pWindow);
+
+#if defined VK_USE_PLATFORM_XCB_KHR // Linux system. 
+		void Create(mbtk::WindowXCB &pWindow);
+#endif
+		void Format(const OBJ_PhysicalDevice& physicalDevice);
 		
 		VkSurfaceKHR vk_Surface;
+		
+		std::vector<VkSurfaceFormatKHR> vk_Formats;
+		VkSurfaceCapabilitiesKHR vk_Capabilities;
 	private:
 		VkInstance vk_Instance;
-		void Setup();
+		
+	};
+
+
+	// 5 VULKAN SWAPCHAIN //
+	class OBJ_Swapchain
+	{
+	public:
+
+		OBJ_Swapchain();
+		virtual ~OBJ_Swapchain();
+		void Create(const OBJ_Surface &Surface, const OBJ_Device& Device);
+
+		VkSwapchainKHR vk_Swapchain;
+		std::vector<VkImage> vk_SwapchainImages;
+	private:
+
+		
 	};
 
 

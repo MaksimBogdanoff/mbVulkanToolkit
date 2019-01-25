@@ -49,9 +49,12 @@ int main(int argc,char** argv)
 
 		// create surface
 		mbvk::OBJ_Surface Surface = mbvk::OBJ_Surface(Instance);
-		Surface.Create(window.hINSTANCE, window.hWIND);
+		Surface.Create(window);
+		Surface.Format(PhysicalDevice);
 
-
+		mbvk::OBJ_Swapchain Swapchain;
+		Swapchain.Create(Surface, Device);
+		
 		while (1) // warning !!! I will soon implement
 		{
 			window.PoolEvents();
@@ -60,7 +63,8 @@ int main(int argc,char** argv)
 	}
 	catch (const char* e) 
 	{
-		cout << "Error application: " << e << endl;
+		//cout << "Error application: " << e << endl;
+		MessageBoxA(NULL, e, "Error", MB_OK);
 	}
 
 	

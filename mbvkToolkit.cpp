@@ -26,6 +26,8 @@ namespace mbtk
 
 	// WINDOW WIN32 //
 
+#if defined VK_USE_PLATFORM_WIN32_KHR
+
 	// mb_programmer: constructor.
 	WindowWin32::WindowWin32()
 	{
@@ -111,7 +113,104 @@ namespace mbtk
 		
 	}
 
-}
+
+#endif
+
+
+	//-------------------------------------------------------------------------------------------------------------------------
+
+
+	// WINDOW XCB //
+
+#if defined VK_USE_PLATFORM_XCB_KHR
+
+	// mb_programmer: constructor.
+	WindowXCB::WindowXCB()
+	{
+#if defined _WIN32
+		MessageBox(NULL, L"This not system Linux!!! Choose class WindowWin32 ",L"Warning",MB_OK|MB_ICONINFORMATION);
+#endif
+	}
+
+	// mb_programmer: destructor.
+	WindowXCB::~WindowXCB()
+	{
+	}
+
+
+	// mb_programmer: settings window.
+	void WindowXCB::Setup()
+	{
+
+		uint32_t value_mask, value_list[32];
+
+		window = xcb_generate_id(connection);
+
+		value_mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
+
+		value_list[0] = screen->black_pixel;
+		value_list[1] =
+			XCB_EVENT_MASK_KEY_RELEASE |
+			XCB_EVENT_MASK_KEY_PRESS |
+			XCB_EVENT_MASK_EXPOSURE |
+			XCB_EVENT_MASK_STRUCTURE_NOTIFY |
+			XCB_EVENT_MASK_POINTER_MOTION |
+			XCB_EVENT_MASK_BUTTON_PRESS |
+			XCB_EVENT_MASK_BUTTON_RELEASE;
+
+		if (settings.fullscreen)
+		{
+			Width = destWidth = screen->width_in_pixels;
+			Height = destHeight = screen->height_in_pixels;
+		}
+
+		xcb_create_window(connection,
+			XCB_COPY_FROM_PARENT,
+			window, screen->root,
+			0, 0, Width, Height, 0,
+			XCB_WINDOW_CLASS_INPUT_OUTPUT,
+			screen->root_visual,
+			value_mask, value_list);
+
+		/* Magic code that will send notification when window is destroyed */
+		xcb_intern_atom_reply_t* reply = intern_atom_helper(connection, true, "WM_PROTOCOLS");
+		atom_wm_delete_window = intern_atom_helper(connection, false, "WM_DELETE_WINDOW");
+
+		xcb_change_property(connection, XCB_PROP_MODE_REPLACE,
+			window, (*reply).atom, 4, 32, 1,
+			&(*atom_wm_delete_window).atom);
+
+		std::string windowTitle = getWindowTitle();
+		xcb_change_property(connection, XCB_PROP_MODE_REPLACE,
+			window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8,
+			title.size(), windowTitle.c_str());
+
+		free(reply);
+
+		if (settings.fullscreen)
+		{
+			xcb_intern_atom_reply_t *atom_wm_state = intern_atom_helper(connection, false, "_NET_WM_STATE");
+			xcb_intern_atom_reply_t *atom_wm_fullscreen = intern_atom_helper(connection, false, "_NET_WM_STATE_FULLSCREEN");
+			xcb_change_property(connection,
+				XCB_PROP_MODE_REPLACE,
+				window, atom_wm_state->atom,
+				XCB_ATOM_ATOM, 32, 1,
+				&(atom_wm_fullscreen->atom));
+			free(atom_wm_fullscreen);
+			free(atom_wm_state);
+		}
+
+		xcb_map_window(connection, window);
+
+
+	}
+
+#endif
+
+
+
+
+}// end namespace mbtk...
 
 
 // vulkan toolkit
@@ -304,6 +403,51 @@ namespace mbvk
 
 		throw std::runtime_error("Could not find a matching queue family index");
 	}
+
+	// mb_programmer: fined surface format.
+	uint32_t SurfaceKHR_FindFormat(VkSurfaceKHR Surface, const VkPhysicalDevice& physicalDevice, std::vector<VkSurfaceFormatKHR>& dataFormat)
+	{
+
+		uint32_t FormatsCount;
+		
+
+		if (vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, Surface, &FormatsCount, nullptr) != VkResult::VK_SUCCESS)
+		{
+			throw std::exception("Vulkan failed to get surface formats count");
+		}
+
+		dataFormat.resize(FormatsCount);
+		if (vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, Surface, &FormatsCount, dataFormat.data()) != VkResult::VK_SUCCESS)
+		{
+			throw std::exception("Vulkan failed to get surface formats");
+		}
+
+		return FormatsCount;
+	}
+
+
+	// mb_programmer: find swapchain image.
+	uint32_t SwapchainKHR_FindImage(const VkDevice& Devise, const VkSwapchainKHR& Swapchain, std::vector<VkImage>& dataImage)
+	{
+		uint32_t ImagesCount;
+		if (vkGetSwapchainImagesKHR(Devise, Swapchain, &ImagesCount, nullptr) != VkResult::VK_SUCCESS)
+		{
+			throw std::exception("failed to get swapchain images count");
+		}
+
+		dataImage.resize(ImagesCount);
+		if (vkGetSwapchainImagesKHR(Devise, Swapchain, &ImagesCount, dataImage.data()) != VkResult::VK_SUCCESS)
+		{
+			throw std::exception("failed to get swapchain images");
+		}
+
+		return ImagesCount;
+	}
+
+
+
+
+
 
 
 	//-----------------------------------------------------------------------------------------------------------------------------------------
@@ -504,7 +648,7 @@ namespace mbvk
 		vkDestroyDevice(vk_Device, nullptr);
 	}
 
-	// mb_programmer: settings.
+	// mb_programmer: settings device queue.
 	void OBJ_Device::Setup()
 	{
 		
@@ -560,7 +704,7 @@ namespace mbvk
 
 	}
 
-
+	// mb_programmer: crate  device.
 	void OBJ_Device::Create(const OBJ_PhysicalDevice& physicalDevice)
 	{
 		// Create a logical device based on the designated physical device.
@@ -613,56 +757,137 @@ namespace mbvk
 		vk_Instance = Istance.vk_Instanse;
 
 	}
-	
-	// mb_programmer: constructor for windows system.
-	void OBJ_Surface::Create(void* win_Inst_or_xcb_connection, void* win32Wind_or_xcb_window)
-	{
-
-		VkResult error = VK_SUCCESS;
-
-		// Windows system.
-#if defined VK_USE_PLATFORM_WIN32_KHR
-		VkWin32SurfaceCreateInfoKHR vk_win32SurfaceCreateInfoKHR = {};
-		vk_win32SurfaceCreateInfoKHR.sType = VkStructureType::VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		vk_win32SurfaceCreateInfoKHR.pNext = nullptr;
-		vk_win32SurfaceCreateInfoKHR.flags = 0;
-		vk_win32SurfaceCreateInfoKHR.hinstance = (HINSTANCE)win_Inst_or_xcb_connection; //GetModuleHandle(NULL);
-		vk_win32SurfaceCreateInfoKHR.hwnd = (HWND)win32Wind_or_xcb_window;
-		
-		if (vkCreateWin32SurfaceKHR(vk_Instance, &vk_win32SurfaceCreateInfoKHR, nullptr, &vk_Surface) != VkResult::VK_SUCCESS)
-		{
-			throw std::exception("Vulkan failed to create surface");
-		}
-	// Linux system. 
-#elif defined(VK_USE_PLATFORM_XCB_KHR)
-		VkXcbSurfaceCreateInfoKHR surfaceCreateInfo = {};
-		surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
-		surfaceCreateInfo.connection = (xcb_connection_t*)win_Inst_or_xcb_connection;
-		surfaceCreateInfo.window = (xcb_window_t)win32Wind_or_xcb_window;
-		if (vkCreateXcbSurfaceKHR(vk_Instance, &surfaceCreateInfo, nullptr, &vk_Surface) != VkResult::VK_SUCCESS)
-		{
-			throw std::exception("Vulkan could not create surface!");
-		}
-#endif
-
-		cout << "Vulkan create surface!" << endl;
-		
-	}
 
 	// mb_programmer: destructor.
 	OBJ_Surface::~OBJ_Surface()
 	{
 		vkDestroySurfaceKHR(vk_Instance, vk_Surface, nullptr);
 	}
-
-	// mb_programmer: ...
-	void OBJ_Surface::Setup()
+	
+	// mb_programmer: constructor for windowsWin32 .
+	void OBJ_Surface::Create(mbtk::WindowWin32 &pWindow)
 	{
+		// Windows system.
+#if defined VK_USE_PLATFORM_WIN32_KHR
+
+		VkResult error = VK_SUCCESS;
+
+		VkWin32SurfaceCreateInfoKHR vk_win32SurfaceCreateInfoKHR = {};
+		vk_win32SurfaceCreateInfoKHR.sType = VkStructureType::VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+		vk_win32SurfaceCreateInfoKHR.pNext = nullptr;
+		vk_win32SurfaceCreateInfoKHR.flags = 0;
+		vk_win32SurfaceCreateInfoKHR.hinstance = (HINSTANCE)pWindow.hINSTANCE; //GetModuleHandle(NULL);
+		vk_win32SurfaceCreateInfoKHR.hwnd = (HWND)pWindow.hWIND;
+		
+		if (vkCreateWin32SurfaceKHR(vk_Instance, &vk_win32SurfaceCreateInfoKHR, nullptr, &vk_Surface) != VkResult::VK_SUCCESS)
+		{
+			throw std::exception("Vulkan failed to create surfaceWin32");
+		}
+	
+		cout << "Vulkan create surfaceWin32!" << endl;
+#endif
+
+	}
+
+	// mb_programmer: Linux system. 
+#if defined(VK_USE_PLATFORM_XCB_KHR)
+	// mb_programmer: constructor for windowsXCB.
+	void OBJ_Surface::Create(mbtk::WindowXCB &pWindow)
+	{
+		
+		VkXcbSurfaceCreateInfoKHR surfaceCreateInfo = {};
+		surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
+		surfaceCreateInfo.connection = pWindow.connection;
+		surfaceCreateInfo.window = pWindow.window;
+		if (vkCreateXcbSurfaceKHR(vk_Instance, &surfaceCreateInfo, nullptr, &vk_Surface) != VkResult::VK_SUCCESS)
+		{
+			throw std::exception("Vulkan could not create surfaceXCB!");
+		}
+
+		cout << "Vulkan create surface XCB!" << endl;
+
+	}
+#endif
+
+	void OBJ_Surface::Format(const OBJ_PhysicalDevice& physicalDevice)
+	{
+		// 1
+		uint32_t count = SurfaceKHR_FindFormat(vk_Surface, physicalDevice.vk_PhysicalDevice, vk_Formats);
+		
+	
+		cout << "Vilkan Surface format count: " << count << endl;
+
+
+		// 2
+		if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice.vk_PhysicalDevice, vk_Surface, &vk_Capabilities) != VkResult::VK_SUCCESS)
+		{
+			throw std::exception("Vulkan failed to get surface capabilities");
+		}
 
 	}
 
 
+	//-----------------------------------------------------------------------------------------------------------------------------------------
 
+
+	// 5 VULKAN SWAPCHAIN //
+
+	// mb_programmer: constructor.
+	OBJ_Swapchain::OBJ_Swapchain()
+	{
+		vk_Swapchain = VK_NULL_HANDLE;
+	}
+
+	// mb_programmer: destructor.
+	OBJ_Swapchain::~OBJ_Swapchain()
+	{
+		//vkDestroySwapchainKHR()
+	}
+
+	// mb_programming: settings.
+	void OBJ_Swapchain::Create(const OBJ_Surface &Surface, const OBJ_Device& Device)
+	{
+
+		VkSwapchainCreateInfoKHR vk_SwapchainCreateInfoKHR;
+		{
+			
+			vk_SwapchainCreateInfoKHR.sType = VkStructureType::VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+			vk_SwapchainCreateInfoKHR.pNext = nullptr;
+			vk_SwapchainCreateInfoKHR.flags = 0;
+			vk_SwapchainCreateInfoKHR.surface = Surface.vk_Surface;
+			vk_SwapchainCreateInfoKHR.minImageCount = 2;
+			vk_SwapchainCreateInfoKHR.imageFormat = Surface.vk_Formats[0].format;
+			vk_SwapchainCreateInfoKHR.imageColorSpace = Surface.vk_Formats[0].colorSpace;
+			vk_SwapchainCreateInfoKHR.imageExtent = VkExtent2D{
+				Surface.vk_Capabilities.currentExtent.width,
+				Surface.vk_Capabilities.currentExtent.height
+			};
+			vk_SwapchainCreateInfoKHR.imageArrayLayers = 1;
+			vk_SwapchainCreateInfoKHR.imageUsage = VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+			vk_SwapchainCreateInfoKHR.imageSharingMode = VkSharingMode::VK_SHARING_MODE_EXCLUSIVE;
+			vk_SwapchainCreateInfoKHR.queueFamilyIndexCount = 0;
+			vk_SwapchainCreateInfoKHR.pQueueFamilyIndices = nullptr;
+			vk_SwapchainCreateInfoKHR.preTransform = VkSurfaceTransformFlagBitsKHR::VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+			vk_SwapchainCreateInfoKHR.compositeAlpha = VkCompositeAlphaFlagBitsKHR::VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+			vk_SwapchainCreateInfoKHR.presentMode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
+			vk_SwapchainCreateInfoKHR.clipped = VK_TRUE;
+			vk_SwapchainCreateInfoKHR.oldSwapchain = VK_NULL_HANDLE;
+		}
+
+		if (vkCreateSwapchainKHR(Device.vk_Device, &vk_SwapchainCreateInfoKHR, nullptr, &vk_Swapchain) != VkResult::VK_SUCCESS)
+		{
+			throw std::exception("Vulkan failed to create swapchain");
+		}
+
+		cout << "Vulkan Seapchan!" << endl;
+
+		// image swapchain.
+		SwapchainKHR_FindImage(Device.vk_Device, vk_Swapchain, vk_SwapchainImages);
+
+		cout << "Vulkan Seapchan image count: " << vk_SwapchainImages .size() << endl;
+	}
+
+	//-----------------------------------------------------------------------------------------------------------------------------------------
 
 
 }// end namespace mbvk...
