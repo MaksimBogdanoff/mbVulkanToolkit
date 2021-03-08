@@ -2,9 +2,8 @@
 #define MB_VK_TOOLKIT_HPP
 /*
 * date: 22/01/2019 
-* web: mbprogrammer.com
-* git: github.com/maximprogram
-* developer: Maksim Bogdanoff 
+* git: github.com/maxcccp
+* developer: Max
 */
 
 #if defined _MSC_VER && defined _WIN32
